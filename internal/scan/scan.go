@@ -32,6 +32,11 @@ type Options struct {
 	FollowSymlinks bool
 	FailFast       bool
 	Workers        int // <= 0 means runtime.NumCPU()
+	// MaxDepth limits how many directory levels below Root are descended.
+	// Root's direct entries are depth 1. 0 (the default) means unlimited.
+	// Directories deeper than the limit are pruned and reported in
+	// Result.DepthPruned rather than silently skipped.
+	MaxDepth int
 }
 
 // FileError records a file that could not be read or hashed.
@@ -42,11 +47,12 @@ type FileError struct {
 
 // Result is the outcome of a scan.
 type Result struct {
-	Records []csvschema.Record // successfully hashed, sorted by absolute path
-	Matched int                // files whose extension matched
-	Errored int                // matched files (or paths) that failed
-	Skipped int                // symlinks / non-regular files not hashed
-	Errors  []FileError        // one per Errored file
+	Records     []csvschema.Record // successfully hashed, sorted by absolute path
+	Matched     int                // files whose extension matched
+	Errored     int                // matched files (or paths) that failed
+	Skipped     int                // symlinks / non-regular files not hashed
+	Errors      []FileError        // one per Errored file
+	DepthPruned []string           // directories not descended due to MaxDepth
 }
 
 // NormalizeExt returns ext lowercased and with exactly one leading dot. It
@@ -66,6 +72,15 @@ func NormalizeExt(ext string) string {
 // a fatal error only for setup problems (empty/missing root, not a directory,
 // no extensions, unsupported algorithm). Per-file read errors are collected in
 // Result.Errors and do not abort the scan unless FailFast is set.
+//
+// Symlink cycles cannot cause infinite recursion: filepath.WalkDir uses lstat
+// semantics and never descends into a symlink. A symlinked directory is reported
+// as a symlink entry (IsDir() == false), so it is skipped (or, with
+// FollowSymlinks, stat'd and hashed only if it resolves to a regular file — its
+// target is never re-walked). The only walk is over real directories, which on a
+// normal filesystem form a tree (no directory hardlinks) and therefore have no
+// cycles. MaxDepth provides an additional bound for exotic cases such as a
+// filesystem cycle created by bind/loop mounts.
 func Run(opts Options) (*Result, error) {
 	if opts.Root == "" {
 		return nil, fmt.Errorf("scan root is empty")
@@ -135,6 +150,15 @@ func Run(opts Options) (*Result, error) {
 			return nil
 		}
 		if d.IsDir() {
+			// Prune directories below the depth limit. The root is depth 0, so
+			// with MaxDepth=N a directory at depth >= N is not descended (its
+			// entries would be at depth > N).
+			if opts.MaxDepth > 0 && depthOf(absRoot, path) >= opts.MaxDepth {
+				mu.Lock()
+				res.DepthPruned = append(res.DepthPruned, path)
+				mu.Unlock()
+				return fs.SkipDir
+			}
 			return nil
 		}
 
@@ -205,7 +229,18 @@ func Run(opts Options) (*Result, error) {
 	sort.Slice(res.Records, func(i, j int) bool {
 		return res.Records[i].AbsolutePath < res.Records[j].AbsolutePath
 	})
+	sort.Strings(res.DepthPruned)
 	return res, nil
+}
+
+// depthOf returns how many directory levels path sits below root. root itself is
+// depth 0, its direct entries are depth 1, and so on.
+func depthOf(root, path string) int {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." {
+		return 0
+	}
+	return strings.Count(rel, string(os.PathSeparator)) + 1
 }
 
 // hashFile opens, stats, and hashes a single file, streaming it through the hash

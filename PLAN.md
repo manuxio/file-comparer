@@ -57,6 +57,7 @@ testdata/                   # sample trees + golden CSVs
 | `--algo` | `ALGO` | `sha256` | `sha256` or `sha512`. |
 | `--follow-symlinks` | `FOLLOW_SYMLINKS` | `false` | Opt-in only. |
 | `--fail-fast` | `FAIL_FAST` | `false` | Abort on first read error instead of tallying. |
+| `--max-depth` | `MAX_DEPTH` | `0` | Max directory levels below root to descend (0 = unlimited; root entries are depth 1). Pruned directories are printed. |
 
 ### 4.2 Algorithm
 1. Validate config; if invalid, print a clear message to stderr and **exit 1**.
@@ -71,6 +72,14 @@ testdata/                   # sample trees + golden CSVs
 > **Scaling note:** buffering all records to sort is fine for typical web-root
 > sizes (10⁴–10⁵ files). If we ever need 10⁷+ files, switch to a streaming
 > writer + external sort. Documented, not built yet.
+
+> **Cycle safety:** `filepath.WalkDir` uses lstat semantics and never descends
+> into a symlink, so symlink cycles cannot cause infinite recursion — only real
+> directories are traversed, and a normal filesystem's directory graph is a tree
+> (no directory hardlinks). `--max-depth` is an additional guard for exotic cases
+> (a real cycle created by bind/loop mounts) and for scoping a scan to the top of
+> a tree. Directories pruned by the limit are printed to stderr and counted in the
+> summary, so limited coverage is never silent.
 
 ### 4.3 Error handling (core requirement)
 - **Config / setup errors** (missing root, no extensions, unwritable output,

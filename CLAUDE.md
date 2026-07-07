@@ -51,6 +51,7 @@ allow-list, and writes one CSV row per file.
   - extensions — `--ext` (repeatable) / `EXTENSIONS` (comma-separated), e.g. `.php,.js,.phtml`
   - output file — `--output` / `OUTPUT` (path inside container, mapped to a mounted volume)
   - hash algo — `--algo` / `ALGO` (default `sha256`)
+  - max depth — `--max-depth` / `MAX_DEPTH` (0 = unlimited; root entries are depth 1)
 - **Output CSV** — see schema below. Rows **sorted by absolute path** (deterministic).
 - **Errors:** config problems fail fast (exit 1). Per-file read errors are
   **always surfaced** to stderr, tallied, and cause a non-zero exit at the end —
@@ -119,6 +120,10 @@ docker run --rm \
   (App 1) / bad input CSV (App 2). See `PLAN.md` for the full table.
 - **Don't follow symlinks** by default (avoids hashing files outside the scanned
   tree and TOCTOU games); symlinks are reported as skips.
+- **No infinite recursion:** `filepath.WalkDir` never descends into a symlink, so
+  symlink cycles can't loop the walk; only real directories (a cycle-free tree) are
+  traversed. `--max-depth` is a further bound for exotic bind/loop-mount cycles, and
+  any directory it prunes is printed to stderr (never a silent cap).
 - **`internal/csvschema` is the single source of truth** for CSV structure — both
   apps import it; never hand-roll headers in `cmd/`.
 - Standard library only where reasonable (`crypto/sha256`, `encoding/csv`,

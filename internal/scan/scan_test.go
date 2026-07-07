@@ -107,6 +107,54 @@ func TestScanSurfacesReadErrors(t *testing.T) {
 	}
 }
 
+func TestScanMaxDepth(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.php", "abc")            // depth 1
+	writeFile(t, dir, "sub/b.php", "abc")        // depth 2
+	writeFile(t, dir, "sub/deeper/c.php", "abc") // depth 3
+
+	// MaxDepth 1: only root's direct entries; sub is pruned.
+	res, err := Run(Options{Root: dir, Exts: []string{".php"}, Algo: "sha256", MaxDepth: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Records) != 1 || res.Records[0].Filename != "a.php" {
+		t.Fatalf("MaxDepth=1: want only a.php, got %v", filenames(res))
+	}
+	if len(res.DepthPruned) != 1 || filepath.Base(res.DepthPruned[0]) != "sub" {
+		t.Fatalf("MaxDepth=1: want sub pruned, got %v", res.DepthPruned)
+	}
+
+	// MaxDepth 2: a.php + sub/b.php; sub/deeper is pruned.
+	res, err = Run(Options{Root: dir, Exts: []string{".php"}, Algo: "sha256", MaxDepth: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Records) != 2 {
+		t.Fatalf("MaxDepth=2: want 2 files, got %v", filenames(res))
+	}
+	if len(res.DepthPruned) != 1 || filepath.Base(res.DepthPruned[0]) != "deeper" {
+		t.Fatalf("MaxDepth=2: want deeper pruned, got %v", res.DepthPruned)
+	}
+
+	// MaxDepth 0 (unlimited): all three, nothing pruned.
+	res, err = Run(Options{Root: dir, Exts: []string{".php"}, Algo: "sha256", MaxDepth: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Records) != 3 || len(res.DepthPruned) != 0 {
+		t.Fatalf("MaxDepth=0: want 3 files and 0 pruned, got %v pruned=%v", filenames(res), res.DepthPruned)
+	}
+}
+
+func filenames(res *Result) []string {
+	out := make([]string, len(res.Records))
+	for i, r := range res.Records {
+		out[i] = r.Filename
+	}
+	return out
+}
+
 func TestRunRejectsBadConfig(t *testing.T) {
 	dir := t.TempDir()
 	cases := map[string]Options{

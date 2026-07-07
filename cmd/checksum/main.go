@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +46,7 @@ func run(args []string, stderr io.Writer) int {
 	algo := fs.String("algo", envOr("ALGO", csvschema.DefaultAlgo), "hash algorithm: "+csvschema.SupportedAlgos())
 	follow := fs.Bool("follow-symlinks", envBool("FOLLOW_SYMLINKS"), "follow symlinks to regular files")
 	failFast := fs.Bool("fail-fast", envBool("FAIL_FAST"), "abort on the first unreadable file")
+	maxDepth := fs.Int("max-depth", envInt("MAX_DEPTH", 0), "max directory levels below root to descend (0 = unlimited; root entries are depth 1)")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -73,6 +75,10 @@ func run(args []string, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "error: unsupported algorithm %q (supported: %s)\n", *algo, csvschema.SupportedAlgos())
 		return 1
 	}
+	if *maxDepth < 0 {
+		fmt.Fprintf(stderr, "error: --max-depth must be >= 0 (got %d)\n", *maxDepth)
+		return 1
+	}
 
 	start := time.Now()
 	res, err := scan.Run(scan.Options{
@@ -81,6 +87,7 @@ func run(args []string, stderr io.Writer) int {
 		Algo:           *algo,
 		FollowSymlinks: *follow,
 		FailFast:       *failFast,
+		MaxDepth:       *maxDepth,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -96,8 +103,18 @@ func run(args []string, stderr io.Writer) int {
 	for _, fe := range res.Errors {
 		fmt.Fprintf(stderr, "read error: %s: %v\n", fe.Path, fe.Err)
 	}
-	fmt.Fprintf(stderr, "checksum: matched=%d hashed=%d errored=%d skipped=%d elapsed=%s output=%s\n",
-		res.Matched, len(res.Records), res.Errored, res.Skipped,
+	// Surface directories not fully scanned because of the depth limit, so
+	// limited coverage is never silent.
+	for _, p := range res.DepthPruned {
+		fmt.Fprintf(stderr, "depth-limit: not descended (max-depth=%d): %s\n", *maxDepth, p)
+	}
+
+	depth := "unlimited"
+	if *maxDepth > 0 {
+		depth = strconv.Itoa(*maxDepth)
+	}
+	fmt.Fprintf(stderr, "checksum: matched=%d hashed=%d errored=%d skipped=%d max-depth=%s depth-pruned=%d elapsed=%s output=%s\n",
+		res.Matched, len(res.Records), res.Errored, res.Skipped, depth, len(res.DepthPruned),
 		time.Since(start).Round(time.Millisecond), *output)
 
 	if res.Errored > 0 {
@@ -140,4 +157,13 @@ func envBool(key string) bool {
 		return true
 	}
 	return false
+}
+
+func envInt(key string, def int) int {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
 }

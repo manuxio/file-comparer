@@ -95,6 +95,7 @@ CSV_DIR=./out          OUT_DIR=./out docker compose run --rm csvdiff
 | `--algo` | `ALGO` | `sha256` | `sha256` or `sha512`. |
 | `--follow-symlinks` | `FOLLOW_SYMLINKS` | `false` | Follow symlinks to regular files. |
 | `--fail-fast` | `FAIL_FAST` | `false` | Abort on the first unreadable file. |
+| `--max-depth` | `MAX_DEPTH` | `0` | Max directory levels below root to descend (0 = unlimited; root entries are depth 1). Pruned directories are printed to stderr. |
 
 Exit codes: `0` all good · `1` fatal config/setup error · `2` manifest produced
 but some files could not be read (details on stderr).
