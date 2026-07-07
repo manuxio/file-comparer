@@ -6,8 +6,9 @@
 *.dylib
 /bin/
 /dist/
-checksum
-csvdiff
+# Built binaries at repo root only (anchored so cmd/checksum, cmd/csvdiff source dirs are kept)
+/checksum
+/csvdiff
 
 # Test / coverage
 *.test
