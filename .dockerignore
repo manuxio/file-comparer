@@ -1,0 +1,10 @@
+.git
+.github
+out
+dist
+bin
+*.exe
+*.local.csv
+CLAUDE.md
+PLAN.md
+README.md

@@ -1,0 +1,35 @@
+# Convenience wiring for local runs. Override the *_DIR variables to point at
+# real data, e.g.:
+#   SCAN_DIR=/path/to/disk OUT_DIR=./out docker compose run --rm checksum
+#
+# Note on permissions: the images run as the non-root uid 65532. The host output
+# directory must be writable by that uid (or run with `--user root` when you are
+# only inspecting a copy). Source data is always mounted read-only.
+
+services:
+  checksum:
+    build:
+      context: .
+      dockerfile: docker/checksum.Dockerfile
+    image: ghcr.io/manuxio/file-comparer/checksum:latest
+    environment:
+      SCAN_ROOT: /mnt/data
+      EXTENSIONS: "${EXTENSIONS:-.php,.js,.phtml,.html,.htaccess}"
+      OUTPUT: /out/current.csv
+      ALGO: sha256
+    volumes:
+      - ${SCAN_DIR:-./data}:/mnt/data:ro
+      - ${OUT_DIR:-./out}:/out
+
+  csvdiff:
+    build:
+      context: .
+      dockerfile: docker/csvdiff.Dockerfile
+    image: ghcr.io/manuxio/file-comparer/csvdiff:latest
+    environment:
+      BASELINE_CSV: /data/baseline.csv
+      CURRENT_CSV: /data/current.csv
+      OUTPUT: /out/changes.csv
+    volumes:
+      - ${CSV_DIR:-./out}:/data:ro
+      - ${OUT_DIR:-./out}:/out
