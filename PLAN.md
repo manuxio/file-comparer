@@ -58,12 +58,17 @@ testdata/                   # sample trees + golden CSVs
 | `--follow-symlinks` | `FOLLOW_SYMLINKS` | `false` | Opt-in only. |
 | `--fail-fast` | `FAIL_FAST` | `false` | Abort on first read error instead of tallying. |
 | `--max-depth` | `MAX_DEPTH` | `0` | Max directory levels below root to descend (0 = unlimited; root entries are depth 1). Pruned directories are printed. |
+| `--workers` | `WORKERS` | `0` | Hash concurrency (0 = CPU count). Lower for a single HDD, higher for NVMe/network. |
+| `--dir-workers` | `DIR_WORKERS` | `0` | Directory-read concurrency (0 = same as `--workers`). |
 
 ### 4.2 Algorithm
 1. Validate config; if invalid, print a clear message to stderr and **exit 1**.
-2. `filepath.WalkDir(root)`; for each regular file whose lowercased extension is
-   in the allow-list, hand it to a bounded worker pool for hashing.
-3. Each worker streams the file through the hash (constant memory) and records:
+2. Traverse the tree with a **pool of `--dir-workers` directory readers** (a
+   shared LIFO work stack; parallel `ReadDir` so the walk is not single-threaded
+   on high-latency storage). Each matching file is fed over a **bounded channel**
+   (backpressure → flat memory) to a **pool of `--workers` hash workers**.
+3. Each hash worker streams the file through the hash with a reusable 1 MiB buffer
+   (constant memory, fewer read syscalls) and records:
    `absolute_path`, `filename` (base name incl. extension), `last_modified`
    (RFC3339 UTC), `size_bytes`, `sha` (lowercase hex).
 4. Collect records, **sort by absolute path**, write CSV with header.

@@ -147,6 +147,47 @@ func TestScanMaxDepth(t *testing.T) {
 	}
 }
 
+func TestScanConcurrentTraversalFindsEverything(t *testing.T) {
+	dir := t.TempDir()
+	// A wide + deep tree: 6 top dirs × 5 subdirs × 4 files = 120 .php files,
+	// plus one non-matching file per subdir.
+	want := 0
+	for a := 0; a < 6; a++ {
+		for b := 0; b < 5; b++ {
+			for f := 0; f < 4; f++ {
+				writeFile(t, dir, filepath.Join(
+					fmt.Sprintf("d%d", a), fmt.Sprintf("s%d", b), fmt.Sprintf("f%d.php", f)), "abc")
+				want++
+			}
+			writeFile(t, dir, filepath.Join(fmt.Sprintf("d%d", a), fmt.Sprintf("s%d", b), "skip.txt"), "abc")
+		}
+	}
+
+	// Run several times with high concurrency; result must be complete and stable.
+	var prev []string
+	for i := 0; i < 5; i++ {
+		res, err := Run(Options{Root: dir, Exts: []string{".php"}, Algo: "sha256", Workers: 8, DirWorkers: 4})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Records) != want || res.Errored != 0 {
+			t.Fatalf("run %d: hashed=%d errored=%d, want %d/0", i, len(res.Records), res.Errored, want)
+		}
+		got := make([]string, len(res.Records))
+		for j, r := range res.Records {
+			got[j] = r.AbsolutePath
+		}
+		if prev != nil {
+			for j := range got {
+				if got[j] != prev[j] {
+					t.Fatalf("run %d not deterministic at %d: %q vs %q", i, j, got[j], prev[j])
+				}
+			}
+		}
+		prev = got
+	}
+}
+
 func filenames(res *Result) []string {
 	out := make([]string, len(res.Records))
 	for i, r := range res.Records {

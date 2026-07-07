@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,8 @@ func run(args []string, stderr io.Writer) int {
 	follow := fs.Bool("follow-symlinks", envBool("FOLLOW_SYMLINKS"), "follow symlinks to regular files")
 	failFast := fs.Bool("fail-fast", envBool("FAIL_FAST"), "abort on the first unreadable file")
 	maxDepth := fs.Int("max-depth", envInt("MAX_DEPTH", 0), "max directory levels below root to descend (0 = unlimited; root entries are depth 1)")
+	workers := fs.Int("workers", envInt("WORKERS", 0), "hash concurrency (0 = number of CPUs; lower for a single HDD, higher for NVMe/network)")
+	dirWorkers := fs.Int("dir-workers", envInt("DIR_WORKERS", 0), "directory-read concurrency (0 = same as --workers)")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -88,6 +91,8 @@ func run(args []string, stderr io.Writer) int {
 		FollowSymlinks: *follow,
 		FailFast:       *failFast,
 		MaxDepth:       *maxDepth,
+		Workers:        *workers,
+		DirWorkers:     *dirWorkers,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
@@ -113,8 +118,16 @@ func run(args []string, stderr io.Writer) int {
 	if *maxDepth > 0 {
 		depth = strconv.Itoa(*maxDepth)
 	}
-	fmt.Fprintf(stderr, "checksum: matched=%d hashed=%d errored=%d skipped=%d max-depth=%s depth-pruned=%d elapsed=%s output=%s\n",
-		res.Matched, len(res.Records), res.Errored, res.Skipped, depth, len(res.DepthPruned),
+	effWorkers := *workers
+	if effWorkers <= 0 {
+		effWorkers = runtime.NumCPU()
+	}
+	effDir := *dirWorkers
+	if effDir <= 0 {
+		effDir = effWorkers
+	}
+	fmt.Fprintf(stderr, "checksum: matched=%d hashed=%d errored=%d skipped=%d workers=%d dir-workers=%d max-depth=%s depth-pruned=%d elapsed=%s output=%s\n",
+		res.Matched, len(res.Records), res.Errored, res.Skipped, effWorkers, effDir, depth, len(res.DepthPruned),
 		time.Since(start).Round(time.Millisecond), *output)
 
 	if res.Errored > 0 {

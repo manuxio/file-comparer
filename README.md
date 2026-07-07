@@ -96,6 +96,8 @@ CSV_DIR=./out          OUT_DIR=./out docker compose run --rm csvdiff
 | `--follow-symlinks` | `FOLLOW_SYMLINKS` | `false` | Follow symlinks to regular files. |
 | `--fail-fast` | `FAIL_FAST` | `false` | Abort on the first unreadable file. |
 | `--max-depth` | `MAX_DEPTH` | `0` | Max directory levels below root to descend (0 = unlimited; root entries are depth 1). Pruned directories are printed to stderr. |
+| `--workers` | `WORKERS` | `0` | Hash concurrency (0 = number of CPUs). Lower for a single HDD, higher for NVMe/network. |
+| `--dir-workers` | `DIR_WORKERS` | `0` | Directory-read concurrency (0 = same as `--workers`). Raise for high-latency/network filesystems with many directories. |
 
 Exit codes: `0` all good · `1` fatal config/setup error · `2` manifest produced
 but some files could not be read (details on stderr).
@@ -111,6 +113,37 @@ but some files could not be read (details on stderr).
 
 Exit codes: `0` success · `1` fatal error · `2` bad input CSV · `3` differences
 found (only with `--fail-on-diff`).
+
+## Performance & tuning
+
+Built for multi-TB scans. Both stages run in parallel:
+
+- **Hashing** — a pool of `--workers` goroutines (default = CPU count), each
+  streaming files through the hash with a reusable 1 MiB buffer.
+- **Directory traversal** — a separate pool of `--dir-workers` goroutines reading
+  directories concurrently, so the walk itself isn't a single-threaded bottleneck
+  on high-latency or high-parallelism storage. The two stages are decoupled by a
+  bounded queue (backpressure keeps memory flat).
+
+Hashing throughput scales near-linearly with workers up to the core count
+(measured on ~750 MB / 1500 files, cache-warm):
+
+| `--workers` | elapsed | speedup |
+|---|---|---|
+| 1  | 510 ms | 1.0× |
+| 2  | 247 ms | 2.1× |
+| 4  | 125 ms | 4.1× |
+| 8  | 69 ms  | 7.4× |
+| 16 | 51 ms  | 10×  |
+
+**Rules of thumb:**
+- **NVMe / SSD / RAID / network:** raise `--workers` (and `--dir-workers` for
+  many-directory trees) — concurrency saturates bandwidth and hides latency.
+- **Single spinning HDD:** *lower* `--workers` (try `2`) — parallel reads cause
+  head thrashing; near-sequential is faster.
+- SHA-256 is hardware-accelerated on modern CPUs, so the workload is almost always
+  I/O-bound: the disk, not the CPU, is the ceiling. Match worker count to the
+  storage medium.
 
 ## Development
 

@@ -52,6 +52,7 @@ allow-list, and writes one CSV row per file.
   - output file — `--output` / `OUTPUT` (path inside container, mapped to a mounted volume)
   - hash algo — `--algo` / `ALGO` (default `sha256`)
   - max depth — `--max-depth` / `MAX_DEPTH` (0 = unlimited; root entries are depth 1)
+  - concurrency — `--workers` / `WORKERS` (hashing) and `--dir-workers` / `DIR_WORKERS` (traversal); both default to CPU count
 - **Output CSV** — see schema below. Rows **sorted by absolute path** (deterministic).
 - **Errors:** config problems fail fast (exit 1). Per-file read errors are
   **always surfaced** to stderr, tallied, and cause a non-zero exit at the end —
