@@ -25,7 +25,7 @@ The two apps share one CSV schema so App 2 can always consume App 1's output.
 .
 ├── CLAUDE.md                 # this file
 ├── PLAN.md                   # implementation plan & locked decisions
-├── go.mod                    # module: github.com/iqera/file_sha_diff (adjust if needed)
+├── go.mod                    # module: github.com/manuxio/file-comparer
 ├── cmd/
 │   ├── checksum/main.go      # App 1 entrypoint (flag/env parsing, wiring)
 │   └── csvdiff/main.go       # App 2 entrypoint

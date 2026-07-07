@@ -29,7 +29,7 @@ Both ship as small Docker images and are run against mounted disks.
 | Symlinks | **Not followed** by default; reported as skips | Prevents hashing outside the tree + TOCTOU. |
 | CSV contract | Centralized in `internal/csvschema` | One source of truth shared by both apps. |
 | Base image | `golang:1.23` builder → `gcr.io/distroless/static-debian12:nonroot` | Minimal attack surface, no shell, non-root by default. |
-| Module path | `github.com/iqera/file_sha_diff` (adjust to actual repo) | Repo will be published as `file-comparer`. |
+| Module path | `github.com/manuxio/file-comparer` | Matches the published repo. |
 | Repo | Public GitHub repo **`file-comparer`**, default branch `main` | Per request. |
 
 ## 3. Repository layout
