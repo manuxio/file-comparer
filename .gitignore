@@ -1,0 +1,25 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/dist/
+checksum
+csvdiff
+
+# Test / coverage
+*.test
+*.out
+coverage.*
+
+# Generated CSVs / local run artifacts
+/out/
+*.local.csv
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
